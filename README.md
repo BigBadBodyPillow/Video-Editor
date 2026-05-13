@@ -9,6 +9,12 @@ Also finding a non bloated free video editor is kinda annoying, especially since
 
 Maybe i should try blender
 
+## Features
+
+- [ ] Crop
+- [ ] Trim
+- [ ] File Type Conversion
+
 ## Thoughts
 
 ### Overview
