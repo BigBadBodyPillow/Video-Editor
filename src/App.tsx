@@ -73,7 +73,7 @@ function App() {
               ref={videoRef}
               src={videoUrlRef.current || ""}
               controls
-              className="w-full max-h-auto border-0"
+              className="w-full max-h-auto border-0 cursor-pointer"
               onLoadedMetadata={(e) => {
                 (e.target as HTMLVideoElement).volume = 0.1;
               }} // set default volume to 10%
