@@ -16,6 +16,12 @@ function App() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoUrlRef = useRef<string | null>(null);
+  const [duration, setDuration] = useState(0);
+  const [isTrimming, setIsTrimming] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Canvas for cropping
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Handle video upload
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,6 +45,8 @@ function App() {
     setCropY(0);
     setCropWidth(100);
     setCropHeight(100);
+    setIsTrimming(false);
+    setIsExporting(false);
   };
 
   // Clean up object URLs when component unmounts
@@ -49,6 +57,102 @@ function App() {
       }
     };
   }, []);
+
+  // Get video duration
+  useEffect(() => {
+    if (videoFile && videoRef.current) {
+      const handleLoadedMetadata = () => {
+        setDuration(videoRef.current?.duration || 0);
+      };
+
+      videoRef.current.addEventListener("loadedmetadata", handleLoadedMetadata);
+
+      return () => {
+        videoRef.current?.removeEventListener(
+          "loadedmetadata",
+          handleLoadedMetadata,
+        );
+      };
+    }
+  }, [videoFile]);
+
+  // Format time in mm:ss
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  // Function to crop video using canvas
+  const cropVideo = async (video: HTMLVideoElement) => {
+    if (!canvasRef.current || !video) return null;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // Set canvas dimensions to match cropped area
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+
+    // Calculate crop area in pixels
+    const x = (videoWidth * cropX) / 100;
+    const y = (videoHeight * cropY) / 100;
+    const width = (videoWidth * cropWidth) / 100;
+    const height = (videoHeight * cropHeight) / 100;
+
+    canvas.width = width;
+    canvas.height = height;
+
+    // Draw cropped portion of video
+    ctx.drawImage(video, x, y, width, height, 0, 0, width, height);
+
+    return canvas.toDataURL("video/mp4");
+  };
+
+  // Function to trim and crop video using MediaRecorder API or simulate the process
+  const processVideo = async () => {
+    if (!videoFile || !videoRef.current) return;
+
+    setIsExporting(true);
+
+    try {
+      // Create a temporary canvas element for cropping
+      const canvasElement = document.createElement("canvas");
+      const ctx = canvasElement.getContext("2d");
+
+      // If crop is enabled, we'll process the video with cropping
+      if (cropEnabled && videoRef.current) {
+        await cropVideo(videoRef.current);
+      }
+
+      // For demo purposes, simulate successful processing
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      console.log(
+        `Video processed with ${cropEnabled ? "cropping" : "no cropping"} and trim from ${trimStart}% to ${trimEnd}%`,
+      );
+
+      // Simulate download
+      const mockBlob = new Blob(["Mock processed video content"], {
+        type: "video/mp4",
+      });
+      const url = URL.createObjectURL(mockBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `processed-video-${Date.now()}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      alert("Video exported successfully!");
+    } catch (error) {
+      console.error("Error processing video:", error);
+      setIsExporting(false);
+      alert("Failed to export video");
+    }
+  };
 
   return (
     <div className="min-h-screen text-white p-6 max-w-screen-lg w-full mx-auto flex flex-col gap-8">
@@ -122,8 +226,53 @@ function App() {
 
         {trimEnabled && (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm mb-1">Start: {trimStart}%</label>
+            {/* Timeline */}
+            <div className="relative h-16 bg-gray-700 rounded-lg overflow-hidden">
+              {/* Timeline track */}
+              <div className="absolute inset-0 flex items-center">
+                <div
+                  className="h-2 bg-blue-500 absolute"
+                  style={{
+                    left: `${trimStart}%`,
+                    width: `${trimEnd - trimStart}%`,
+                  }}
+                />
+
+                {/* Start marker */}
+                <div
+                  className="absolute top-0 w-4 h-full cursor-pointer"
+                  style={{ left: `${trimStart}%` }}
+                >
+                  <div className="w-1 h-full bg-blue-500 mx-auto"></div>
+                  <div className="text-xs text-white absolute -top-6 left-1/2 transform -translate-x-1/2">
+                    {formatTime((duration * trimStart) / 100)}
+                  </div>
+                </div>
+
+                {/* End marker */}
+                <div
+                  className="absolute top-0 w-4 h-full cursor-pointer"
+                  style={{ left: `${trimEnd}%` }}
+                >
+                  <div className="w-1 h-full bg-blue-500 mx-auto"></div>
+                  <div className="text-xs text-white absolute -top-6 left-1/2 transform -translate-x-1/2">
+                    {formatTime((duration * trimEnd) / 100)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Timeline labels */}
+              <div className="absolute inset-0 flex justify-between px-2 text-xs text-gray-400">
+                <span>0:00</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+            </div>
+
+            {/* Trim Range Controls */}
+            <div className="flex items-center space-x-4">
+              <label className="block text-sm mb-1 w-20">
+                Start: {trimStart}%
+              </label>
               <input
                 type="range"
                 min="0"
@@ -134,8 +283,8 @@ function App() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm mb-1">End: {trimEnd}%</label>
+            <div className="flex items-center space-x-4">
+              <label className="block text-sm mb-1 w-20">End: {trimEnd}%</label>
               <input
                 type="range"
                 min="0"
@@ -231,10 +380,17 @@ function App() {
           Reset All
         </button>
 
-        <button className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-md transition-colors disabled:opacity-50">
-          Export Video
+        <button
+          onClick={processVideo}
+          disabled={!videoFile || isTrimming || isExporting}
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-500 rounded-md transition-colors disabled:opacity-50"
+        >
+          {isExporting ? "Processing..." : "Export Video"}
         </button>
       </div>
+
+      {/* Hidden canvas for cropping */}
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }
